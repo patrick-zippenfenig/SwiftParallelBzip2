@@ -13,8 +13,12 @@ public enum SwiftParallelBzip2Error: Error {
 }
 
 extension AsyncSequence where Element: DataProtocol, Self: Sendable {
-    public func decodeBzip2(bufferPolicy: AsyncBufferSequencePolicy = .bounded(10)) async throws -> AsyncThrowingMapSequence<AsyncBufferSequence<AsyncThrowingChannel<Task<ByteBuffer, any Error>, any Error>>, ByteBuffer> {
-        let channel = AsyncThrowingChannel<Task<ByteBuffer, any Error>, Error>()
+    /**
+     Decode an bzip2 encoded stream of ByteBuffer to a stream of decoded blocks. Throws on invalid data.
+     `bufferPolicy` can be used to limit buffering of decoded blocks. Defaults to 4 decoded blocks in the output channel
+     */
+    public func decodeBzip2(bufferPolicy: AsyncBufferSequencePolicy = .bounded(4)) async throws -> AsyncThrowingMapSequence<AsyncBufferSequence<AsyncThrowingChannel<Task<ByteBuffer, any Error>, any Error>>, ByteBuffer> {
+        let worker = AsyncThrowingChannel<Task<ByteBuffer, any Error>, Error>()
         Task {
             var inputStream = InputStream<Self>(input: self)
             do {
@@ -22,27 +26,26 @@ extension AsyncSequence where Element: DataProtocol, Self: Sendable {
                 while true {
                     try Task.checkCancellation()
                     guard let headerCrc = try await parser.parse(&inputStream) else {
-                        channel.finish()
+                        worker.finish()
                         return
                     }
-                    
                     let decoder = Decoder(headerCrc: headerCrc)
                     while try await decoder.retrieve(&inputStream.inputBuffer, &inputStream.bitstream) {
                         try await inputStream.more()
                     }
-                    await channel.send(Task {
+                    await worker.send(Task {
                         await decoder.decode()
                         return try await decoder.emit()
                     })
                 }
             } catch {
-                channel.fail(error)
+                worker.fail(error)
             }
         }
-        let result = channel.buffer(policy: bufferPolicy).map { task in
+        // Limit the number of worker according to buffer policy
+        return worker.buffer(policy: bufferPolicy).map { task in
             try await task.value
         }
-        return result
     }
 }
 
