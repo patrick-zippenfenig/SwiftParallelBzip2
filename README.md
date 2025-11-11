@@ -26,7 +26,7 @@ Finally, add `import SwiftParallelBzip2` to your source code.
 
 
 ## Usage
-Data must be provided as an AsyncSequence<ByteBuffer> and will be returned as AsyncSequence<ByteBuffer>. ByteBuffer is based on SwiftNIO.
+Data must be provided as an `AsyncSequence<ByteBuffer>` and will be returned as `AsyncSequence<ByteBuffer>`. ByteBuffer is based on SwiftNIO.
 
 Example:
 
