@@ -18,6 +18,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -37,6 +38,7 @@ let package = Package(
             name: "Run",
             dependencies: [
                 .target(name: "SwiftParallelBzip2"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "_NIOFileSystem", package: "swift-nio")
             ]
         ),

@@ -11,7 +11,7 @@ add the following line to the dependencies in your `Package.swift` file:
 
 ```swift
 .package(url: "https://github.com/patrick-zippenfenig
-/SwiftParallelBzip2", from: "1.0.0"),
+/SwiftParallelBzip2", from: "0.0.0"),
 ```
 
 Include `"SwiftParallelBzip2"` as a dependency for your executable target:
