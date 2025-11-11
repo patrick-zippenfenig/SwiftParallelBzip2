@@ -1,11 +1,13 @@
 import Foundation
 import Lbzip2
 import NIOCore
+import AsyncAlgorithms
 
 public enum SwiftParallelBzip2Error: Error {
     case invalidBzip2Header
     case invalidStreamHeader
     case streamCRCMismatch
+    case blockCRCMismatch
     case unexpectedEndOfStream
     case unexpectedParserError(UInt32)
     case unexpectedDecoderError(UInt32)
@@ -54,27 +56,34 @@ struct InputStream<T: AsyncSequence> where T.Element: DataProtocol {
     }
 }
 
-func decode<T: AsyncSequence>(input: T) async throws where T.Element: DataProtocol {
-    var inputStream = InputStream(input: input)
-    var parser = try await inputStream.parseFileHeader()
-
-    
-    while true {
-        guard let headerCrc = try await parser.parse(&inputStream) else {
-            print("finished")
-            return
-        }
-        
-        let decoder = Decoder(headerCrc: headerCrc)
-        while try await decoder.retrieve(&inputStream.inputBuffer, &inputStream.bitstream) {
-            try await inputStream.more()
-        }
-        
+extension AsyncSequence where Element: DataProtocol, Self: Sendable {
+    func decodeBzip2() async throws -> AsyncBufferSequence<AsyncThrowingMapSequence<AsyncThrowingChannel<Decoder, any Error>, ByteBuffer>> {
+        let channel = AsyncThrowingChannel<Decoder, Error>()
         Task {
-            decoder.decode()
-            try decoder.emit()
-
+            var inputStream = InputStream<Self>(input: self)
+            do {
+                var parser = try await inputStream.parseFileHeader()
+                while true {
+                    try Task.checkCancellation()
+                    guard let headerCrc = try await parser.parse(&inputStream) else {
+                        channel.finish()
+                        return
+                    }
+                    
+                    let decoder = Decoder(headerCrc: headerCrc)
+                    while try await decoder.retrieve(&inputStream.inputBuffer, &inputStream.bitstream) {
+                        try await inputStream.more()
+                    }
+                    await channel.send(decoder)
+                }
+            } catch {
+                channel.fail(error)
+            }
         }
+        return channel.map { decoder in
+            await decoder.decode()
+            return try await decoder.emit()
+        }.buffer(policy: .bounded(10))
     }
 }
 
@@ -136,7 +145,7 @@ extension InputStream {
     }
 }
 
-final class Decoder {
+final actor Decoder {
     var decoder = decoder_state()
     var headerCrc: UInt32
     
@@ -173,19 +182,20 @@ final class Decoder {
         Lbzip2.decode(&decoder)
     }
     
-    func emit() throws {
-        // Run Emit
-        // Can also run in a different thread again and produces the uncompressed output
-        
-        let output = UnsafeMutableRawBufferPointer.allocate(byteCount: Int(decoder.block_size), alignment: 0)
-        var outsize: Int = output.count
-        let emitRv = Lbzip2.emit(&decoder, output.baseAddress, &outsize)
-        print(emitRv, outsize)
-        // rv can be MORE to grow the output buffer
-        print("Decoder CRC expected \(decoder.crc)")
-        assert(decoder.crc == headerCrc)
-        
-        print(String(data: Data(output[0..<output.count - outsize]), encoding: .utf8))
+    func emit() throws -> ByteBuffer {
+        var out = ByteBuffer()
+        out.writeWithUnsafeMutableBytes(minimumWritableBytes: Int(decoder.block_size)) { ptr in
+            var outsize: Int = ptr.count
+            guard Lbzip2.emit(&decoder, ptr.baseAddress, &outsize) == Lbzip2.OK.rawValue else {
+                // Emit should not fail because enough output capacity is available
+                fatalError("emit failed")
+            }
+            return ptr.count - outsize
+        }
+        guard decoder.crc == headerCrc else {
+            throw SwiftParallelBzip2Error.blockCRCMismatch
+        }
+        return out
     }
     
     deinit {

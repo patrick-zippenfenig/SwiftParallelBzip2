@@ -1,6 +1,15 @@
 {
-  "originHash" : "6ada0eda4470c7f455fae3ad8404889bc1135d29376b65385226f01718b56450",
+  "originHash" : "5dee10b4fcfbe9f08019af57a21fd06963f36ff58355d5e17068a660326e67b5",
   "pins" : [
+    {
+      "identity" : "swift-async-algorithms",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-async-algorithms",
+      "state" : {
+        "revision" : "042e1c4d9d19748c9c228f8d4ebc97bb1e339b0b",
+        "version" : "1.0.4"
+      }
+    },
     {
       "identity" : "swift-atomics",
       "kind" : "remoteSourceControl",
