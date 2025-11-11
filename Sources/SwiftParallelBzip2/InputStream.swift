@@ -3,7 +3,7 @@ import Lbzip2
 import NIOCore
 
 /// Wrap AsyncSequence iterator, ByteBuffer and bitstream
-struct InputStream<T: AsyncSequence> where T.Element: DataProtocol {
+struct InputStream<T: AsyncSequence> where T.Element == ByteBuffer {
     var inputItr: T.AsyncIterator
     var bitstream: bitstream
     var inputBuffer: ByteBuffer
@@ -22,22 +22,22 @@ struct InputStream<T: AsyncSequence> where T.Element: DataProtocol {
     }
     
     mutating func more() async throws {
-        guard let next = try await inputItr.next() else {
+        guard var next = try await inputItr.next() else {
             bitstream.eof = true
             return
         }
         inputBuffer.discardReadBytes()
-        inputBuffer.writeBytes(next)
+        inputBuffer.writeBuffer(&next)
     }
 }
 
 
 extension InputStream {
     mutating func parseFileHeader() async throws -> Parser {
-        guard let firstData = try await inputItr.next() else {
+        guard var firstData = try await inputItr.next() else {
             throw SwiftParallelBzip2Error.unexpectedEndOfStream
         }
-        inputBuffer.writeBytes(firstData)
+        inputBuffer.writeBuffer(&firstData)
         guard let head: Int32 = inputBuffer.readInteger() else {
             throw SwiftParallelBzip2Error.unexpectedEndOfStream
         }
@@ -107,11 +107,13 @@ extension InputStream {
 
 final actor Decoder {
     var decoder = decoder_state()
-    var headerCrc: UInt32
+    let headerCrc: UInt32
+    let bs100k: Int32
     
-    public init(headerCrc: UInt32) {
+    public init(headerCrc: UInt32, bs100k: Int32) {
         decoder_init(&decoder)
         self.headerCrc = headerCrc
+        self.bs100k = bs100k
     }
     
     /// Return true until all data is available
@@ -144,7 +146,8 @@ final actor Decoder {
     
     func emit() throws -> ByteBuffer {
         var out = ByteBuffer()
-        out.writeWithUnsafeMutableBytes(minimumWritableBytes: Int(decoder.block_size)) { ptr in
+        // Reserve the maximum output block size
+        out.writeWithUnsafeMutableBytes(minimumWritableBytes: Int(bs100k*100_000)) { ptr in
             var outsize: Int = ptr.count
             guard Lbzip2.emit(&decoder, ptr.baseAddress, &outsize) == Lbzip2.OK.rawValue else {
                 // Emit should not fail because enough output capacity is available

@@ -12,7 +12,7 @@ public enum SwiftParallelBzip2Error: Error {
     case unexpectedDecoderError(UInt32)
 }
 
-extension AsyncSequence where Element: DataProtocol, Self: Sendable {
+extension AsyncSequence where Element == ByteBuffer, Self: Sendable {
     /**
      Decode an bzip2 encoded stream of ByteBuffer to a stream of decoded blocks. Throws on invalid data.
      `bufferPolicy` can be used to limit buffering of decoded blocks. Defaults to 4 decoded blocks in the output channel
@@ -29,7 +29,7 @@ extension AsyncSequence where Element: DataProtocol, Self: Sendable {
                         worker.finish()
                         return
                     }
-                    let decoder = Decoder(headerCrc: headerCrc)
+                    let decoder = Decoder(headerCrc: headerCrc, bs100k: parser.parser.bs100k)
                     while try await decoder.retrieve(&inputStream.inputBuffer, &inputStream.bitstream) {
                         try await inputStream.more()
                     }
@@ -48,4 +48,3 @@ extension AsyncSequence where Element: DataProtocol, Self: Sendable {
         }
     }
 }
-

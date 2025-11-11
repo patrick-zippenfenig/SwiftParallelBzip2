@@ -33,6 +33,13 @@ let package = Package(
         .target(
             name: "Lbzip2"
         ),
+        .executableTarget(
+            name: "Run",
+            dependencies: [
+                .target(name: "SwiftParallelBzip2"),
+                .product(name: "_NIOFileSystem", package: "swift-nio")
+            ]
+        ),
         .testTarget(
             name: "SwiftParallelBzip2Tests",
             dependencies: ["SwiftParallelBzip2"]
