@@ -3,12 +3,8 @@ import Testing
 import Foundation
 
 @Test func example() async throws {
-    
-    let projectHome = String(#filePath[...#filePath.range(of: "/Sources/")!.lowerBound])
-    FileManager.default.changeCurrentDirectoryPath(projectHome)
-    
-    let compressed = try Data(contentsOf: URL(fileURLWithPath: "test.txt.bz2"))
-    print(compressed)
+    // Hello World\n
+    let compressed = Data([66, 90, 104, 57, 49, 65, 89, 38, 83, 89, 216, 114, 1, 47, 0, 0, 1, 87, 128, 0, 16, 64, 0, 0, 64, 0, 128, 6, 4, 144, 0, 32, 0, 34, 6, 134, 212, 32, 201, 136, 199, 105, 232, 40, 31, 139, 185, 34, 156, 40, 72, 108, 57, 0, 151, 128])
     
     // turn to AsyncStream with chunks of 64kb
     let stream: AsyncStream<Data> = AsyncStream { continuation in
