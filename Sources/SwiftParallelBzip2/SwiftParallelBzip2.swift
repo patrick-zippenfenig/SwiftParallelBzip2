@@ -18,10 +18,8 @@ extension AsyncSequence where Element == ByteBuffer, Self: Sendable {
      Decode an bzip2 encoded stream of ByteBuffer to a stream of decoded blocks. Throws on invalid data.
      `bufferPolicy` can be used to limit buffering of decoded blocks. Defaults to 4 decoded blocks in the output channel
      */
-    public func decodeBzip2(bufferPolicy: AsyncBufferSequencePolicy = .bounded(4)) -> AsyncThrowingMapSequence<AsyncBufferSequence<Bzip2AsyncStream<Self>>, ByteBuffer> {
-        return Bzip2AsyncStream(sequence: self).buffer(policy: bufferPolicy).map { task in
-            try await task.value
-        }
+    public func decodeBzip2(bufferPolicy: AsyncBufferSequencePolicy = .bounded(4)) -> Bzip2AsyncStream<Self> {
+        return Bzip2AsyncStream(sequence: self)
     }
 }
 
@@ -67,7 +65,7 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
             }
         }
 
-        public func next() async throws -> Task<ByteBuffer, any Error>? {
+        public func next() async throws -> ByteBuffer? {
             if bitstream.data == nil {
                 let bs100k = try await parseFileHeader()
                 parser_init(&parser, bs100k, 0)
@@ -79,10 +77,10 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
             while try await retrieve(decoder: &decoder.decoder) {
                 try await more()
             }
-            return Task {
+//            return Task {
                 decoder.decode()
                 return try decoder.emit()
-            }
+//            }
         }
     }
 
