@@ -4,13 +4,11 @@ import NIOCore
 
 /// Wrap AsyncSequence iterator, ByteBuffer and bitstream
 struct InputStream<T: AsyncSequence> where T.Element == ByteBuffer {
-    var base: T
     var inputItr: T.AsyncIterator
     var bitstream: bitstream
     var inputBuffer: ByteBuffer
     
     public init(input: T) {
-        self.base = input
         self.inputItr = input.makeAsyncIterator()
         self.bitstream = Lbzip2.bitstream()
         self.inputBuffer = ByteBuffer()
