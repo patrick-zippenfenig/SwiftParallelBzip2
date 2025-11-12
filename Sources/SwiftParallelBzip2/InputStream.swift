@@ -22,12 +22,17 @@ struct InputStream<T: AsyncSequence> where T.Element == ByteBuffer {
     }
     
     mutating func more() async throws {
-        guard var next = try await inputItr.next() else {
+        guard let next = try await inputItr.next() else {
             bitstream.eof = true
             return
         }
-        inputBuffer.discardReadBytes()
-        inputBuffer.writeBuffer(&next)
+        inputBuffer = consume next
+        
+        // make sure to align readable bytes to 4 bytes
+        let remaining = inputBuffer.readableBytes % 4
+        if remaining != 0 {
+            inputBuffer.writeRepeatingByte(0, count: 4-remaining)
+        }
     }
 }
 
@@ -72,18 +77,19 @@ extension InputStream {
             while true {
                 var header = header()
                 parserLoop: while true {
-                    var garbage: UInt32 = 0
                     let parserReturn = stream.inputBuffer.readWithUnsafeReadableBytes { ptr in
                         stream.bitstream.data = ptr.baseAddress?.assumingMemoryBound(to: UInt32.self)
                         stream.bitstream.limit = ptr.baseAddress?.advanced(by: ptr.count).assumingMemoryBound(to: UInt32.self)
+                        var garbage: UInt32 = 0
                         let ret = Lbzip2.error(rawValue: UInt32(Lbzip2.parse(&parser, &header, &stream.bitstream, &garbage)))
+                        assert(garbage < 32)
+                        assert(stream.bitstream.data <= stream.bitstream.limit)
                         let bytesRead = ptr.baseAddress?.distance(to: UnsafeRawPointer(stream.bitstream.data)) ?? 0
                         //print("parser bytesRead \(bytesRead)")
                         return (bytesRead, ret)
                     }
                     switch parserReturn {
                     case OK:
-                        assert(garbage < 32)
                         return header.crc
                     case FINISH:
                         return nil
@@ -123,9 +129,10 @@ final actor Decoder {
             bitstream.limit = ptr.baseAddress?.advanced(by: ptr.count).assumingMemoryBound(to: UInt32.self)
             //print("Bitstream IN \(bitstream.data!) \(bitstream.limit!)")
             let ret = Lbzip2.error(rawValue: UInt32(Lbzip2.retrieve(&decoder, &bitstream)))
+            assert(bitstream.data <= bitstream.limit)
             //print("Bitstream OUT \(bitstream.data!) \(bitstream.limit!)")
             let bytesRead = ptr.baseAddress?.distance(to: UnsafeRawPointer(bitstream.data)) ?? 0
-            //print("retrieve bytesRead \(bytesRead)")
+            //print("retrieve bytesRead \(bytesRead) ret=\(ret)")
             return (bytesRead, ret)
         }
         switch ret {
@@ -158,6 +165,7 @@ final actor Decoder {
         guard decoder.crc == headerCrc else {
             throw SwiftParallelBzip2Error.blockCRCMismatch
         }
+        //print("emit \(out.readableBytes) bytes")
         return out
     }
     
