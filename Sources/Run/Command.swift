@@ -22,7 +22,9 @@ struct Command: AsyncParsableCommand {
             try await FileSystem.shared.withFileHandle(forWritingAt: FilePath(outfile), options: OpenOptions.Write(existingFile: .truncate, newFile: newFileOptions)) { writeFn in
                 let time = DispatchTime.now()
                 try await writeFn.withBufferedWriter { writer in
-                    for try await chunk in readFn.readChunks(chunkLength: .kibibytes(128)).decodeBzip2(bufferPolicy: .bounded(4)) {
+                    /// Buffer up tp 4 chunks of data from disk
+                    let bufferedReader = readFn.readChunks(chunkLength: .kibibytes(128)).buffer(policy: .bounded(4))
+                    for try await chunk in bufferedReader.decodeBzip2(bufferPolicy: .bounded(4)) {
                         try await writer.write(contentsOf: chunk)
                     }
                 }

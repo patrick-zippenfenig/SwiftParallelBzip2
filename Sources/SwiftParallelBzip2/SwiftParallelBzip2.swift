@@ -1,6 +1,7 @@
 import Foundation
 import NIOCore
 import AsyncAlgorithms
+import Lbzip2
 
 public enum SwiftParallelBzip2Error: Error {
     case invalidBzip2Header
@@ -17,34 +18,79 @@ extension AsyncSequence where Element == ByteBuffer, Self: Sendable {
      Decode an bzip2 encoded stream of ByteBuffer to a stream of decoded blocks. Throws on invalid data.
      `bufferPolicy` can be used to limit buffering of decoded blocks. Defaults to 4 decoded blocks in the output channel
      */
-    public func decodeBzip2(bufferPolicy: AsyncBufferSequencePolicy = .bounded(4)) -> AsyncThrowingMapSequence<AsyncBufferSequence<AsyncThrowingChannel<Task<ByteBuffer, any Error>, any Error>>, ByteBuffer> {
-        let worker = AsyncThrowingChannel<Task<ByteBuffer, any Error>, Error>()
-        Task {
-            var inputStream = InputStream<Self>(input: self)
-            do {
-                var parser = try await inputStream.parseFileHeader()
-                while true {
-                    try Task.checkCancellation()
-                    guard let headerCrc = try await parser.parse(&inputStream) else {
-                        worker.finish()
-                        return
-                    }
-                    let decoder = Decoder(headerCrc: headerCrc, bs100k: parser.parser.bs100k)
-                    while try await decoder.retrieve(&inputStream.inputBuffer, &inputStream.bitstream) {
-                        try await inputStream.more()
-                    }
-                    await worker.send(Task {
-                        await decoder.decode()
-                        return try await decoder.emit()
-                    })
-                }
-            } catch {
-                worker.fail(error)
-            }
-        }
-        // Limit the number of worker according to buffer policy
-        return worker.buffer(policy: bufferPolicy).map { task in
+    public func decodeBzip2(bufferPolicy: AsyncBufferSequencePolicy = .bounded(4)) -> AsyncThrowingMapSequence<AsyncBufferSequence<Bzip2AsyncStream<Self>>, ByteBuffer> {
+        return Bzip2AsyncStream(sequence: self).buffer(policy: bufferPolicy).map { task in
             try await task.value
         }
     }
+}
+
+/**
+ Decompress incoming ByteBuffer stream to an Async Sequence of Tasks that will return a ByteBuffer. The task is then executed in the background to allow concurrent processing.
+ */
+public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element == ByteBuffer {
+    public typealias Element = AsyncIterator.Element
+
+    let sequence: T
+
+    public final class AsyncIterator: AsyncIteratorProtocol {
+        /// Collect enough bytes to decompress a single message
+        var iterator: T.AsyncIterator
+        var bitstream: bitstream
+        var buffer: ByteBuffer
+        var parser: parser_state = parser_state()
+
+        fileprivate init(sequence: T) {
+            self.iterator = sequence.makeAsyncIterator()
+            self.bitstream = Lbzip2.bitstream()
+            self.buffer = ByteBuffer()
+            
+            bitstream.live = 0
+            bitstream.buff = 0
+            bitstream.block = nil
+            bitstream.data = nil
+            bitstream.limit = nil
+            bitstream.eof = false
+        }
+        
+        func more() async throws {
+            guard let next = try await iterator.next() else {
+                bitstream.eof = true
+                return
+            }
+            buffer = consume next
+            
+            // make sure to align readable bytes to 4 bytes
+            let remaining = buffer.readableBytes % 4
+            if remaining != 0 {
+                buffer.writeRepeatingByte(0, count: 4-remaining)
+            }
+        }
+
+        public func next() async throws -> Task<ByteBuffer, any Error>? {
+            if bitstream.data == nil {
+                let bs100k = try await parseFileHeader()
+                parser_init(&parser, bs100k, 0)
+            }
+            guard let headerCrc = try await parse(parser: &parser) else {
+                return nil
+            }
+            let decoder = Decoder(headerCrc: headerCrc, bs100k: parser.bs100k)
+            while try await retrieve(decoder: &decoder.decoder) {
+                try await more()
+            }
+            return Task {
+                decoder.decode()
+                return try decoder.emit()
+            }
+        }
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(sequence: sequence)
+    }
+}
+
+extension Bzip2AsyncStream: Sendable where T: Sendable {
+    
 }
