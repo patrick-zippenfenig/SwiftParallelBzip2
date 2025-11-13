@@ -34,59 +34,60 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
     public final class AsyncIterator: AsyncIteratorProtocol {
         /// Collect enough bytes to decompress a single message
         var iterator: T.AsyncIterator
-        var bitstream: bitstream
-        var buffer: ByteBuffer
-        var parser: parser_state = parser_state()
+//        var bitstream: bitstream
+//        var buffer: ByteBuffer
+//        var parser: parser_state = parser_state()
 
         fileprivate init(sequence: T) {
             self.iterator = sequence.makeAsyncIterator()
-            self.bitstream = Lbzip2.bitstream()
-            self.buffer = ByteBuffer()
-            
-            bitstream.live = 0
-            bitstream.buff = 0
-            bitstream.block = nil
-            bitstream.data = nil
-            bitstream.limit = nil
-            bitstream.eof = false
+//            self.bitstream = Lbzip2.bitstream()
+//            self.buffer = ByteBuffer()
+//            
+//            bitstream.live = 0
+//            bitstream.buff = 0
+//            bitstream.block = nil
+//            bitstream.data = nil
+//            bitstream.limit = nil
+//            bitstream.eof = false
         }
         
-        func more() async throws {
-            guard let next = try await iterator.next() else {
-                bitstream.eof = true
-                return
-            }
-            buffer = consume next
-            
-            // make sure to align readable bytes to 4 bytes
-            let remaining = buffer.readableBytes % 4
-            if remaining != 0 {
-                buffer.writeRepeatingByte(0, count: 4-remaining)
-            }
-        }
+//        func more() async throws {
+//            guard let next = try await iterator.next() else {
+//                bitstream.eof = true
+//                return
+//            }
+//            buffer = consume next
+//            
+//            // make sure to align readable bytes to 4 bytes
+//            let remaining = buffer.readableBytes % 4
+//            if remaining != 0 {
+//                buffer.writeRepeatingByte(0, count: 4-remaining)
+//            }
+//        }
 
         public func next() async throws -> ByteBuffer? {
-            if bitstream.data == nil {
-                let bs100k = try await parseFileHeader()
-                print("parser init")
-                parser_init(&parser, bs100k, 0)
-            }
-            print("parse")
-            guard let headerCrc = try await parse(parser: &parser) else {
-                return nil
-            }
-            print("retrieve")
-            let decoder = Decoder(headerCrc: headerCrc, bs100k: parser.bs100k)
-            while try await retrieve(decoder: &decoder.decoder) {
-                try await more()
-            }
-            print("decode")
-//            return Task {
-                decoder.decode()
-            print("emit")
-                let res = try decoder.emit()
-            print("done")
-            return res
+            return try await iterator.next()
+//            if bitstream.data == nil {
+//                let bs100k = try await parseFileHeader()
+//                print("parser init")
+//                parser_init(&parser, bs100k, 0)
+//            }
+//            print("parse")
+//            guard let headerCrc = try await parse(parser: &parser) else {
+//                return nil
+//            }
+//            print("retrieve")
+//            let decoder = Decoder(headerCrc: headerCrc, bs100k: parser.bs100k)
+//            while try await retrieve(decoder: &decoder.decoder) {
+//                try await more()
+//            }
+//            print("decode")
+////            return Task {
+//                decoder.decode()
+//            print("emit")
+//                let res = try decoder.emit()
+//            print("done")
+//            return res
 //            }
         }
     }
