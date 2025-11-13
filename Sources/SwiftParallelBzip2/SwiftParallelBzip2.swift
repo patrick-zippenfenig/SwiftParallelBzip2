@@ -33,13 +33,13 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
 
     public final class AsyncIterator: AsyncIteratorProtocol {
         /// Collect enough bytes to decompress a single message
-        var iterator: T.AsyncIterator
+        private var iterator: T.AsyncIterator
 //        var bitstream: bitstream
 //        var buffer: ByteBuffer
 //        var parser: parser_state = parser_state()
 
-        fileprivate init(sequence: T) {
-            self.iterator = sequence.makeAsyncIterator()
+        fileprivate init(iterator: T.AsyncIterator) {
+            self.iterator = iterator
 //            self.bitstream = Lbzip2.bitstream()
 //            self.buffer = ByteBuffer()
 //            
@@ -93,7 +93,7 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(sequence: sequence)
+        AsyncIterator(iterator: sequence.makeAsyncIterator())
     }
 }
 
