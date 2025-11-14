@@ -23,8 +23,8 @@ struct Command: AsyncParsableCommand {
                 let time = DispatchTime.now()
                 try await writeFn.withBufferedWriter { writer in
                     /// Buffer up tp 4 chunks of data from disk
-                    let bufferedReader = readFn.readChunks(chunkLength: .kibibytes(128)).buffer(policy: .bounded(4))
-                    for try await chunk in bufferedReader.decodeBzip2(bufferPolicy: .bounded(4)) {
+                    let bufferedReader = readFn.readChunks(chunkLength: .kibibytes(128))
+                    for try await chunk in bufferedReader.decodeBzip2(nConcurrent: 4) {
                         try await writer.write(contentsOf: chunk)
                     }
                 }

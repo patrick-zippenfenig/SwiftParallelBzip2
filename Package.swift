@@ -17,7 +17,6 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
-        .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0")
     ],
     targets: [
@@ -27,7 +26,6 @@ let package = Package(
             name: "SwiftParallelBzip2",
             dependencies: [
                 .target(name: "Lbzip2"),
-                .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "NIOCore", package: "swift-nio")
             ]
         ),
