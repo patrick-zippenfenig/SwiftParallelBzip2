@@ -43,11 +43,11 @@ import NIOCore
     
     // turn to AsyncStream with chunks of 64kb
     let stream: AsyncStream<ByteBuffer> = AsyncStream { continuation in
-        let chunkSize = 8 //64 * 1024 // 64 KB
+        let chunkSize = 64 * 1024 // 64 KB
         var offset = 0
         while offset < compressed.readableBytes {
             let end = min(offset + chunkSize, compressed.readableBytes)
-            let chunk = compressed.getSlice(at: offset, length: chunkSize)!
+            let chunk = compressed.getSlice(at: offset, length: end-offset)!
             continuation.yield(chunk)
             offset = end
         }
@@ -58,5 +58,4 @@ import NIOCore
     let str = r.readString(length: r.readableBytes)!
     #expect(str == "Hello World\n")
 }
-
 ```

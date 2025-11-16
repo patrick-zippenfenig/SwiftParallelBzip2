@@ -2,7 +2,6 @@ import Testing
 @testable import SwiftParallelBzip2
 import Foundation
 import NIOCore
-import NIOFileSystem
 
 @Test func example() async throws {
     // bzip2 encoded: Hello World\n
