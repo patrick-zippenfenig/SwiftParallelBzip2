@@ -351,13 +351,11 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
                         break
                     case Lbzip2.MORE:
                         switch await pointer.next {
-                        case .none:
-                            fatalError()
+                        case .none, .eof:
+                            return .error(SwiftParallelBzip2Error.unexpectedEndOfStream, startBlock: start, startBs: startBitstream, startOffset: startOffset)
                         case .next(let bufferLinkedList):
                             pointer = bufferLinkedList
                             offset = 0
-                        case .eof:
-                            fatalError()
                         }
                         continue
                     default:
