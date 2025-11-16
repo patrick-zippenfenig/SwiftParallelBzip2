@@ -21,15 +21,20 @@ struct Command: AsyncParsableCommand {
         try await FileSystem.shared.withFileHandle(forReadingAt: FilePath(infile)) { readFn in
             try await FileSystem.shared.withFileHandle(forWritingAt: FilePath(outfile), options: OpenOptions.Write(existingFile: .truncate, newFile: newFileOptions)) { writeFn in
                 let time = DispatchTime.now()
+                var count = 0
                 try await writeFn.withBufferedWriter { writer in
                     /// Buffer up tp 4 chunks of data from disk
                     let bufferedReader = readFn.readChunks(chunkLength: .kibibytes(128))
-                    for try await chunk in bufferedReader.decodeBzip2(nConcurrent: 4) {
+                    for try await chunk in bufferedReader.decodeBzip2() {
+                        count += chunk.readableBytes
                         try await writer.write(contentsOf: chunk)
                     }
                 }
                 if verbose {
+                    let timeSeconds = Double((DispatchTime.now().uptimeNanoseconds - time.uptimeNanoseconds)) / 1_000_000_000
+                    let rate = Double(count) / 1024 / 1024 / timeSeconds
                     print(time.timeElapsedPretty())
+                    print("\(rate) MB/s")
                 }
             }
         }

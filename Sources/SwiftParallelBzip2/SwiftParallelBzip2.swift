@@ -16,9 +16,9 @@ public enum SwiftParallelBzip2Error: Error {
 extension AsyncSequence where Element == ByteBuffer, Self: Sendable {
     /**
      Decode an bzip2 encoded stream of ByteBuffer to a stream of decoded blocks. Throws on invalid data.
-     `nConcurrent` sets the number of threads to decompress blocks. Default 4.
+     `nConcurrent` sets the number of threads to decompress blocks. Default to cpu core count.
      */
-    public func decodeBzip2(nConcurrent: Int = 4) -> Bzip2AsyncStream<Self> {
+    public func decodeBzip2(nConcurrent: Int = System.coreCount) -> Bzip2AsyncStream<Self> {
         return Bzip2AsyncStream(sequence: self, nConcurrent: nConcurrent)
     }
 }
