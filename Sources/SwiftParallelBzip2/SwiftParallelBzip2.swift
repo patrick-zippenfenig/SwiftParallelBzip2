@@ -50,6 +50,8 @@ final actor BufferLinkedList {
     func setNext(_ next: Entry) -> Void {
         self.next = next
     }
+    
+
 }
 
 struct DecodeReturn: Sendable {
@@ -227,6 +229,35 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
             }
             return result
         }
+        
+        func ensure(readableBytes: Int, pointer: BufferLinkedList) async throws {
+            var pointer = pointer
+            var available = pointer.buffer.readableBytes
+            while true {
+                if available >= readableBytes {
+                    return
+                }
+                switch await pointer.next {
+                case .none:
+                    guard var data = try await iterator.next() else {
+                        await pointer.setNext(.eof)
+                        break
+                    }
+                    // make sure to align readable bytes to 4 bytes
+                    let remaining = data.readableBytes % 4
+                    data.reserveCapacity(minimumWritableBytes: 4-remaining)
+                    let next = BufferLinkedList(buffer: data, next: .none)
+                    await pointer.setNext(.next(next))
+                    pointer = next
+                    available += next.buffer.readableBytes
+                case .next(let next):
+                    pointer = next
+                    available += next.buffer.readableBytes
+                case .eof:
+                    return
+                }
+            }
+        }
 
         /// Decode the next block and return a closure to decode it
         /// The closure can be executed concurrently
@@ -253,35 +284,11 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
             }
             
             // ensure at least 1mb of data available in the buffers chain
-            var available = 0
             guard let start = buffers else {
                 fatalError()
             }
+            try await ensure(readableBytes: 1024*1024 + offset, pointer: start)
             var pointer = start
-            while true {
-                available += pointer.buffer.readableBytes
-                // TODO ensure correct size
-                if available >= 4 * 1024 * 1024 {
-                    break
-                }
-                switch await pointer.next {
-                case .none:
-                    guard var data = try await iterator.next() else {
-                        await pointer.setNext(.eof)
-                        break
-                    }
-                    // make sure to align readable bytes to 4 bytes
-                    let remaining = data.readableBytes % 4
-                    data.reserveCapacity(minimumWritableBytes: 4-remaining)
-                    await pointer.setNext(.next(BufferLinkedList(buffer: data, next: .none)))
-                case .next(let next):
-                    pointer = next
-                case .eof:
-                    break
-                }
-            }
-            
-            pointer = start
             
             // Scan for block MAGIC number and BLOCK CRC
             var headerCrc: UInt32 = 0
@@ -311,6 +318,8 @@ public struct Bzip2AsyncStream<T: AsyncSequence>: AsyncSequence where T.Element 
                 }
             }
             self.buffers = pointer
+            
+            try await ensure(readableBytes: 1024*1024 + offset, pointer: pointer)
             
             // Bitstream points to beginning of data, spawn task and process it
             return { [bitstream, pointer, offset, headerCrc, bs100k] in
