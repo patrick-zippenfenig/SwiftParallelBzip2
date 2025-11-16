@@ -279,7 +279,7 @@ parse(struct parser_state *restrict ps, struct header *restrict hd,
      MORE - block header magic was not found
 */
 int
-scan(struct bitstream *bs, unsigned skip)
+scan(struct bitstream *bs, unsigned skip, unsigned* crc)
 {
   unsigned state = 0;
   const uint32_t *data, *limit;
@@ -304,6 +304,7 @@ again:
 
     if (state == ACCEPT) {
       if (bits_need(bs, 32) == OK) {
+        *crc = bits_peek(bs, 32);
         bits_dump(bs, 32);
         return OK;
       }
